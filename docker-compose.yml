@@ -1,0 +1,157 @@
+# ===================================================================
+# Reborn DataOps Platform — dbt Docs Hub
+# ===================================================================
+# Three business services + one OIDC edge proxy:
+#   - Filtering API (dbtdocs-filtering-api): enforcement layer. Receives
+#     each documentation request, consults the policy engine, returns
+#     only what the user is authorized to see.
+#   - Web Server (dbtdocs-web): serves the React SPA shells, the native
+#     dbt-docs HTML for the lineage iframe, and proxies dynamic JSON
+#     to the filtering API.
+#   - Metadata Indexer (dbtdocs-indexer): watches the artifact store,
+#     detects new projects, syncs documentation files, builds the
+#     cross-project search index, and reconfigures the web server on a
+#     loop, without human intervention.
+#   - dbtdocs-oauth2-proxy: OIDC edge proxy in front of the web server.
+#
+# External dependencies (provided by the platform):
+#   - Identity Provider  (e.g. Keycloak)            — via KEYCLOAK_URL
+#   - Artifact Store     (S3-compatible, e.g. MinIO) — via MINIO_*
+#   - Policy Engine      (e.g. OPA + dbtdocs bundle) — via POLICY_ENGINE_URL
+
+services:
+
+  # -----------------------------------------------------------------
+  # Filtering API — enforcement layer (consults the Policy Engine,
+  # filters JSON).
+  # -----------------------------------------------------------------
+  dbtdocs-filtering-api:
+    build: ./filtering_api
+    container_name: dbtdocs-filtering-api
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio-secret-change-me}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dbt-docs}
+      POLICY_ENGINE_URL: ${POLICY_ENGINE_URL:-http://opa:8181}
+    networks:
+      - dbt-docs-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------------
+  # Metadata Indexer — autonomous loop:
+  # watches MinIO, syncs docs, builds the search index, reconfigures
+  # the web server (touches a flag file → web server reloads in place).
+  # -----------------------------------------------------------------
+  dbtdocs-indexer:
+    build: ./indexer
+    container_name: dbtdocs-indexer
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio-secret-change-me}
+      MINIO_BUCKET: ${MINIO_BUCKET:-dbt-docs}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-60}
+      DOCS_ROOT: /usr/share/nginx/html
+      NGINX_CONF_OUT: /etc/nginx/conf.d/portal.conf
+      NGINX_RELOAD_SIGNAL_FILE: /var/run/nginx/reload.flag
+      FILTERING_API_UPSTREAM: http://dbtdocs-filtering-api:8000
+    volumes:
+      - docs-content:/usr/share/nginx/html
+      - nginx-conf:/etc/nginx/conf.d
+      - nginx-reload:/var/run/nginx
+    networks:
+      - dbt-docs-net
+    depends_on:
+      dbtdocs-filtering-api:
+        condition: service_healthy
+
+  # -----------------------------------------------------------------
+  # Web Server — static assets + routing.
+  # -----------------------------------------------------------------
+  dbtdocs-web:
+    image: nginx:1.27-alpine
+    container_name: dbtdocs-web
+    volumes:
+      - ./nginx/nginx.base.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/entrypoint.sh:/usr/local/bin/portal-entrypoint.sh:ro
+      - docs-content:/usr/share/nginx/html
+      - nginx-conf:/etc/nginx/conf.d
+      - nginx-reload:/var/run/nginx
+    entrypoint: ["/bin/sh", "/usr/local/bin/portal-entrypoint.sh"]
+    networks:
+      - dbt-docs-net
+    depends_on:
+      dbtdocs-indexer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # -----------------------------------------------------------------
+  # oauth2-proxy — OIDC entrypoint (Keycloak-backed)
+  # -----------------------------------------------------------------
+  dbtdocs-oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    container_name: dbtdocs-oauth2-proxy
+    command:
+      - --provider=keycloak-oidc
+      - --oidc-issuer-url=${KEYCLOAK_URL:-http://keycloak.local:8090}/realms/${KEYCLOAK_REALM:-reborn}
+      - --client-id=${KEYCLOAK_CLIENT_ID:-dbt-docs-hub}
+      - --client-secret=${KEYCLOAK_CLIENT_SECRET:-dbt-docs-hub-secret-change-me}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+      - --cookie-secure=false
+      - --cookie-domain=localhost
+      - --whitelist-domain=localhost
+      - --whitelist-domain=keycloak.local
+      - --whitelist-domain=keycloak.local:8090
+      - --reverse-proxy=true
+      - --http-address=0.0.0.0:4180
+      - --upstream=http://dbtdocs-web:80
+      - --redirect-url=http://localhost:8095/oauth2/callback
+      - --scope=openid profile email
+      - --email-domain=*
+      - --pass-access-token=true
+      - --pass-authorization-header=true
+      - --set-authorization-header=true
+      - --set-xauthrequest=true
+      - --skip-provider-button=true
+      - --skip-auth-route=^/health$$
+      - --skip-jwt-bearer-tokens=true
+      - --oidc-extra-audience=account
+      - --insecure-oidc-allow-unverified-email=true
+    ports:
+      - "8095:4180"
+    networks:
+      - dbt-docs-net
+    extra_hosts:
+      - "keycloak.local:host-gateway"
+    # No healthcheck: the official image is distroless (no shell, no
+    # wget/curl). The Web Server's healthcheck downstream is a good
+    # enough liveness signal for the edge.
+    depends_on:
+      dbtdocs-web:
+        condition: service_started
+
+volumes:
+  docs-content:
+  nginx-conf:
+  nginx-reload:
+
+networks:
+  # Default: a self-contained network created by this stack. To plug into
+  # an existing network (e.g. a parent demo running its own MinIO/Keycloak),
+  # set HUB_NETWORK_NAME and HUB_NETWORK_EXTERNAL=true in .env, or override
+  # at compose time:
+  #   HUB_NETWORK_NAME=<your-existing-network> HUB_NETWORK_EXTERNAL=true \
+  #     docker compose up -d
+  dbt-docs-net:
+    name: ${HUB_NETWORK_NAME:-dbt-docs-hub-net}
+    external: ${HUB_NETWORK_EXTERNAL:-false}

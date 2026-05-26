@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [filtering_api, indexer]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.17"
+          enable-cache: true
+          cache-dependency-glob: ${{ matrix.service }}/uv.lock
+
+      - name: Sync (incl. dev deps)
+        working-directory: ${{ matrix.service }}
+        run: uv sync --frozen
+
+      - name: Ruff check
+        working-directory: ${{ matrix.service }}
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        working-directory: ${{ matrix.service }}
+        run: uv run ruff format --check .
+
+      - name: Pytest
+        working-directory: ${{ matrix.service }}
+        run: |
+          if [ -d tests ]; then uv run pytest; else echo "no tests yet"; fi
+
+  build-images:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [filtering_api, indexer]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: false
+          load: true
+          tags: dbtdocs-${{ matrix.service }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

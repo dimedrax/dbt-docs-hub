@@ -1,0 +1,27 @@
+[project]
+name = "dbtdocs-indexer"
+version = "0.1.0"
+description = "Reborn DataOps Platform — dbt docs Metadata Indexer"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3==1.35.40",
+    "jinja2==3.1.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.3",
+    "ruff==0.7.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

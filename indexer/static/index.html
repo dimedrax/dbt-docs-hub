@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reborn — dbt Docs Hub</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const GLOBAL_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --blue:        #1B2FCC;
+  --blue-dark:   #1525A8;
+  --blue-deeper: #0e1a7a;
+  --blue-light:  #e8ebfc;
+  --blue-mid:    #c5cbf5;
+  --silver:      #B8C4D4;
+  --ink:         #0d1257;
+  --ink-muted:   #4a5280;
+  --ink-faint:   #8e97c4;
+  --bg:          #f0f2fc;
+  --surface:     #ffffff;
+  --surface-alt: #e8ebfc;
+  --border:      rgba(27,47,204,.10);
+  --border-strong: rgba(27,47,204,.22);
+  --radius:      8px;
+  --shadow:      0 1px 4px rgba(27,47,204,.08), 0 4px 20px rgba(27,47,204,.06);
+  --shadow-hover:0 4px 12px rgba(27,47,204,.15), 0 12px 40px rgba(27,47,204,.10);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+
+/* TOPBAR */
+.topbar { background: var(--blue); padding: 0 32px; height: 52px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(27,47,204,.35); }
+.brand  { display: flex; align-items: center; gap: 10px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 15px; color: #fff; text-decoration: none; cursor: pointer; }
+.brand-sub { font-weight: 300; opacity: .75; }
+.topbar-right { display: flex; align-items: center; gap: 18px; }
+.user-pill    { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,.7); }
+.avatar       { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.2); border: 1.5px solid rgba(255,255,255,.3); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; font-family: 'DM Mono', monospace; }
+.btn-logout   { font-size: 12px; font-family: 'DM Mono', monospace; color: rgba(255,255,255,.65); padding: 5px 12px; border: 1px solid rgba(255,255,255,.2); border-radius: var(--radius); cursor: pointer; background: transparent; letter-spacing: .02em; transition: all .15s; text-decoration: none; }
+.btn-logout:hover { color: #fff; border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.1); }
+
+/* HERO */
+.hero      { background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 55%, var(--blue-deeper) 100%); padding: 48px 32px 52px; position: relative; overflow: hidden; }
+.hero-orb1 { position: absolute; top: -60px; right: -60px; width: 280px; height: 280px; border-radius: 50%; background: rgba(255,255,255,.04); pointer-events: none; }
+.hero-orb2 { position: absolute; bottom: -80px; left: 20%; width: 200px; height: 200px; border-radius: 50%; background: rgba(184,196,212,.06); pointer-events: none; }
+.hero-inner { max-width: 1200px; margin: 0 auto; position: relative; }
+.hero-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: var(--silver); margin-bottom: 12px; }
+.hero-title { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 300; letter-spacing: -.02em; line-height: 1.12; color: #fff; margin-bottom: 32px; }
+.hero-title em { font-style: italic; color: var(--silver); }
+
+/* SEARCH */
+.search-wrap  { position: relative; }
+.search-icon  { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--ink-faint); pointer-events: none; }
+.search-input { width: 100%; padding: 14px 16px 14px 46px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--ink); background: #fff; border: 2px solid transparent; border-radius: var(--radius); outline: none; box-shadow: 0 2px 16px rgba(0,0,0,.15); transition: border-color .15s, box-shadow .15s; -webkit-appearance: none; }
+.search-input:focus { border-color: var(--blue); box-shadow: 0 2px 16px rgba(0,0,0,.15), 0 0 0 3px rgba(27,47,204,.15); }
+.search-input::placeholder { color: var(--ink-faint); }
+
+/* LAYOUT */
+.main { max-width: 1200px; margin: 0 auto; padding: 36px 32px; }
+.section-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+.section-title  { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+.section-count  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); }
+
+/* PROJECT CARDS */
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 40px; }
+.proj-card { background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px 22px; cursor: pointer; text-decoration: none; display: block; position: relative; overflow: hidden; transition: box-shadow .2s, border-color .2s, transform .2s; }
+.proj-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--blue); opacity: 0; transition: opacity .18s; }
+.proj-card:hover { box-shadow: var(--shadow-hover); border-color: rgba(27,47,204,.30); transform: translateY(-2px); }
+.proj-card:hover::before { opacity: 1; }
+.proj-card:hover .proj-arrow { transform: translate(2px, -2px); color: var(--blue); }
+.proj-name  { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--blue); margin-bottom: 3px; }
+.proj-meta  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); margin-bottom: 14px; }
+.proj-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat-chip  { font-size: 11px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--border-strong); color: var(--ink-muted); font-family: 'DM Mono', monospace; background: var(--surface-alt); }
+.chip-pii   { background: #fff0ed; color: #c8440c; border-color: #f5b8a8; }
+.proj-arrow { position: absolute; top: 18px; right: 16px; color: var(--blue-mid); font-size: 16px; transition: transform .18s, color .18s; }
+
+/* RESULTS TABLE */
+.result-table { background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 40px; }
+.result-row   { display: grid; grid-template-columns: 100px 1fr 2fr 80px; gap: 16px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; transition: background .12s; }
+.result-row:last-child { border-bottom: none; }
+.result-row:hover { background: var(--blue-light); }
+.result-head  { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); background: var(--surface-alt); border-bottom: 1.5px solid var(--border); }
+.badge        { font-family: 'DM Mono', monospace; font-size: 11px; padding: 3px 9px; border-radius: 4px; display: inline-block; white-space: nowrap; background: var(--blue); color: #fff; }
+.result-model { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--ink); }
+.result-desc  { font-size: 13px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-cols  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); text-align: right; }
+.empty        { padding: 48px; text-align: center; color: var(--ink-faint); font-family: 'Fraunces', serif; font-size: 18px; font-style: italic; }
+
+/* FOOTER */
+.footer      { max-width: 1200px; margin: 0 auto; padding: 20px 32px 36px; display: flex; align-items: center; justify-content: space-between; border-top: 1.5px solid var(--border); }
+.footer-note { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); }
+
+/* LOADING / ERROR */
+.center-screen { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--blue-light); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-card { background: #fff; padding: 32px 40px; border-radius: var(--radius); border: 1.5px solid #f5b8a8; max-width: 400px; text-align: center; }
+.error-card h2 { color: #c8440c; font-family: 'Fraunces', serif; margin-bottom: 8px; }
+
+/* ANIMATIONS */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.fade-card { animation: fadeUp .35s ease both; }
+`;
+
+function AcornIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <ellipse cx="14" cy="18" rx="9" ry="10" fill="white" />
+      <ellipse cx="14" cy="10" rx="10" ry="5.5" fill="#B8C4D4" />
+      <circle cx="14" cy="10.5" r="1.5" fill="white" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="search-icon">
+      <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Topbar({ user }) {
+  const logoutHref = "/oauth2/sign_out?rd=" + encodeURIComponent(
+    "http://keycloak.local:8090/realms/reborn/protocol/openid-connect/logout" +
+    "?post_logout_redirect_uri=" + encodeURIComponent("http://localhost:8095/") +
+    "&client_id=dbt-docs-hub"
+  );
+  return (
+    <nav className="topbar">
+      <div className="brand">
+        <AcornIcon />
+        <span>ReBorn&nbsp;<span className="brand-sub">Data Docs</span></span>
+      </div>
+      <div className="topbar-right">
+        <div className="user-pill">
+          <div className="avatar">{user.initials}</div>
+          <span>{user.name}</span>
+        </div>
+        <a className="btn-logout" href={logoutHref}>sign out →</a>
+      </div>
+    </nav>
+  );
+}
+
+function Hero({ query, onQuery }) {
+  return (
+    <div className="hero">
+      <div className="hero-orb1" />
+      <div className="hero-orb2" />
+      <div className="hero-inner">
+        <div className="hero-label">Reborn DataOps Platform</div>
+        <h1 className="hero-title">Your data,<br /><em>documented.</em></h1>
+        <div className="search-wrap">
+          <SearchIcon />
+          <input
+            type="search"
+            className="search-input"
+            placeholder="Search models, columns, tags across all projects…"
+            value={query}
+            onChange={e => onQuery(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjCard({ project, idx }) {
+  const updated = project.generated_at
+    ? new Date(project.generated_at).toLocaleDateString()
+    : "—";
+  return (
+    <a
+      className="proj-card fade-card"
+      href={`/${project.name}/`}
+      style={{ animationDelay: `${idx * 0.06}s` }}
+    >
+      <div className="proj-name">{project.name}</div>
+      <div className="proj-meta">updated {updated}</div>
+      <div className="proj-stats">
+        <span className="stat-chip">{project.model_count} model{project.model_count !== 1 ? "s" : ""}</span>
+        {project.hasPii && <span className="stat-chip chip-pii">PII</span>}
+      </div>
+      <span className="proj-arrow">↗</span>
+    </a>
+  );
+}
+
+function ResultRow({ item }) {
+  const cols    = item.columns || [];
+  const preview = cols.slice(0, 2).join(", ") + (cols.length > 2 ? ` +${cols.length - 2}` : "");
+  return (
+    <a className="result-row" href={`/${item.project}/`}>
+      <span><span className="badge">{item.project}</span></span>
+      <span className="result-model">{item.model || "—"}</span>
+      <span className="result-desc">{item.description || <em style={{ color:"var(--ink-faint)" }}>no description</em>}</span>
+      <span className="result-cols">{preview}</span>
+    </a>
+  );
+}
+
+function Loader() {
+  return (
+    <div className="center-screen">
+      <div className="spinner" />
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--ink-muted)" }}>loading…</span>
+    </div>
+  );
+}
+
+function ErrorPanel({ msg }) {
+  return (
+    <div className="center-screen">
+      <div className="error-card">
+        <h2>Something went wrong</h2>
+        <p style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 16 }}>{msg}</p>
+        <button onClick={() => location.reload()} style={{
+          padding: "8px 18px", border: "none", borderRadius: 8, cursor: "pointer",
+          background: "var(--blue)", color: "white", fontFamily: "'DM Mono', monospace", fontSize: 12
+        }}>Reload</button>
+      </div>
+    </div>
+  );
+}
+
+function Portal() {
+  const [query, setQuery] = useState("");
+  const [data, setData]   = useState(null);
+  const [error, setError] = useState(null);
+  const [syncTime]        = useState(() =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
+
+  useEffect(() => {
+    fetch("/api/projects", { credentials: "same-origin" })
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then(setData)
+      .catch(e => setError(String(e)));
+  }, []);
+
+  if (error) return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
+      <ErrorPanel msg={error} />
+    </>
+  );
+  if (!data) return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
+      <Loader />
+    </>
+  );
+
+  // Build user object from API response
+  const userName = data.user || "?";
+  const initials = userName.slice(0, 2).toUpperCase();
+  const user = { name: userName, initials };
+
+  // Enrich projects with hasPii (true if any column tagged pii in their model index)
+  const projectsByName = {};
+  for (const m of data.models) {
+    if (!projectsByName[m.project]) projectsByName[m.project] = { hasPii: false };
+    if ((m.tags || []).includes("pii")) projectsByName[m.project].hasPii = true;
+  }
+  const projects = data.projects.map(p => ({ ...p, hasPii: projectsByName[p.name]?.hasPii || false }));
+
+  const showResults = query.trim().length > 0;
+  const results = showResults
+    ? data.models.filter(item => {
+        const h = [item.project, item.model, item.schema, item.description,
+                   ...(item.tags || []), ...(item.columns || [])]
+                  .filter(Boolean).join(" ").toLowerCase();
+        return h.includes(query.trim().toLowerCase());
+      })
+    : [];
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
+
+      <Topbar user={user} />
+
+      <Hero query={query} onQuery={setQuery} />
+
+      <main className="main">
+        {showResults ? (
+          <>
+            <div className="section-header">
+              <span className="section-title">Results</span>
+              <span className="section-count">
+                {results.length} result{results.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="result-table">
+              <div className="result-row result-head">
+                <span>Project</span>
+                <span>Model</span>
+                <span>Description</span>
+                <span style={{ textAlign: "right" }}>Columns</span>
+              </div>
+              {results.length > 0
+                ? results.map((r, i) => <ResultRow key={i} item={r} />)
+                : <div className="empty">Nothing found for "{query}"</div>
+              }
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="section-header">
+              <span className="section-title">Projects</span>
+              <span className="section-count">{projects.length} accessible</span>
+            </div>
+            <div className="projects-grid">
+              {projects.map((p, i) => <ProjCard key={p.name} project={p} idx={i} />)}
+            </div>
+          </>
+        )}
+      </main>
+
+      <footer className="footer">
+        <span className="footer-note">ReBorn Market · Data Docs Portal</span>
+        <span className="footer-note">last sync {syncTime}</span>
+      </footer>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Portal />);
+</script>
+</body>
+</html>

@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reborn — dbt Catalog</title>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.28.0?deps=react@18.3.1,react-dom@18.3.1"
+  }
+}
+</script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useEffect, useMemo } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } from "react-router-dom";
+
+// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
+const TOKENS_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --blue: #1B2FCC;
+  --blue-hover: #1525A8;
+  --blue-10: rgba(27,47,204,.08);
+  --blue-20: rgba(27,47,204,.15);
+  --silver: #B8C4D4;
+  --surface: #ffffff;
+  --surface-raised: #fafafa;
+  --surface-overlay: #f4f5f9;
+  --border: #e4e5ec;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --gold-bg: #fffbeb; --gold-text: #92400e; --gold-border: #fcd34d;
+  --silver-bg: #f8faff; --silver-text: #3730a3; --silver-border: #c7d2fe;
+  --green-bg: #f0fdf4; --green-text: #166534; --green-border: #86efac;
+  --red-bg: #fff1f2; --red-text: #9f1239; --red-border: #fda4af;
+  --gray-bg: #f9fafb; --gray-text: #374151; --gray-border: #d1d5db;
+  --bronze-bg: #fef3c7; --bronze-text: #78350f; --bronze-border: #fbbf24;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--surface-overlay); color: var(--text-primary); min-height: 100vh; font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+svg { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+svg.icon { width: 14px; height: 14px; }
+svg.icon-xs { width: 11px; height: 11px; }
+svg.icon-sm { width: 12px; height: 12px; }
+
+/* TOPBAR */
+.topbar { background: var(--blue); height: 48px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 4px rgba(27,47,204,.4); }
+.topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.topbar-acorn { display: inline-flex; align-items: center; }
+.topbar-sep { color: rgba(255,255,255,.25); margin: 0 4px; }
+.crumb { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crumb a, .crumb span { color: rgba(255,255,255,.78); font-size: 13px; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb a:hover { color: #fff; }
+.crumb .crumb-current { color: #fff; font-weight: 500; }
+.crumb-arrow { color: rgba(255,255,255,.4); font-size: 11px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-pill { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 4px; background: rgba(255,255,255,.14); color: rgba(255,255,255,.9); border: 1px solid rgba(255,255,255,.18); }
+.topbar-action { color: rgba(255,255,255,.85); font-size: 12px; font-family: var(--font-mono); padding: 5px 12px; border: 1px solid rgba(255,255,255,.25); border-radius: var(--radius); transition: all .15s; }
+.topbar-action:hover { color: #fff; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.5); }
+
+/* LAYOUT WITH SIDEBAR */
+.app-layout { display: grid; grid-template-columns: 220px 1fr; gap: 0; min-height: calc(100vh - 48px); }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; }
+.sidebar-section { padding: 0 16px 18px; }
+.sidebar-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; }
+.sidebar-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius); font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: all .12s; gap: 8px; margin-bottom: 1px; }
+.sidebar-item:hover { background: var(--blue-10); color: var(--text-primary); }
+.sidebar-item.active { background: var(--blue); color: #fff; }
+.sidebar-item.active .sidebar-count { color: rgba(255,255,255,.8); }
+.sidebar-item.active:hover { background: var(--blue-hover); }
+.sidebar-item-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sidebar-item-label .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sidebar-item-label .name { font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+/* Layer dot — colour resolved at runtime via inline style (see layerColor). */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* MAIN CONTENT */
+.main { padding: 28px 32px; max-width: 1080px; }
+.stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; }
+.stat-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 6px; }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.stat-value.green { color: #166534; }
+.stat-value.red   { color: #9f1239; }
+
+/* MODELS LIST */
+.list-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.list-header { display: grid; grid-template-columns: 1.2fr 2fr 100px 80px; gap: 16px; padding: 10px 18px; background: var(--surface-raised); border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); }
+.list-row { display: grid; grid-template-columns: 1.2fr 2fr 100px 80px; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); align-items: center; cursor: pointer; transition: background .12s; }
+.list-row:last-child { border-bottom: none; }
+.list-row:hover { background: var(--blue-10); }
+.list-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.list-desc { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-cols { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-align: right; }
+.list-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* BADGES — semantic ones use CSS classes; layer badges are coloured at
+   runtime from the LAYER_COLORS palette (with a grey fallback). */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: 500; border: 1px solid transparent; }
+.badge.pii    { background: var(--red-bg);    color: var(--red-text);    border-color: var(--red-border); }
+.badge.tests  { background: var(--green-bg);  color: var(--green-text);  border-color: var(--green-border); }
+.badge.gray   { background: var(--gray-bg);   color: var(--gray-text);   border-color: var(--gray-border); }
+
+/* HERO (ModelDetail) */
+.hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px 24px; margin-bottom: 18px; }
+.hero-title { font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.hero-path { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); margin-bottom: 14px; }
+.hero-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.hero-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; max-width: 720px; margin-bottom: 14px; }
+.hero-actions { display: flex; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); font-size: 12px; font-family: var(--font-mono); font-weight: 500; border: 1px solid transparent; transition: all .15s; }
+.btn-primary  { background: var(--blue); color: #fff; }
+.btn-primary:hover  { background: var(--blue-hover); }
+.btn-secondary { background: var(--surface); color: var(--text-primary); border-color: var(--border); }
+.btn-secondary:hover { background: var(--surface-raised); border-color: var(--text-tertiary); }
+
+/* PROPS STRIP */
+.props { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 18px; overflow: hidden; }
+.prop { padding: 14px 18px; border-right: 1px solid var(--border); }
+.prop:last-child { border-right: none; }
+.prop-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 4px; }
+.prop-value { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--text-primary); }
+
+/* SECTION CARDS */
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 18px; overflow: hidden; }
+.section-h { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface-raised); }
+.section-h-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; }
+.section-body { padding: 0; }
+
+/* COL TABLE */
+.col-table { width: 100%; }
+.col-row { display: grid; grid-template-columns: 1.2fr 1fr 2.2fr 90px; gap: 16px; padding: 11px 18px; border-bottom: 1px solid var(--border); align-items: center; }
+.col-row:last-child { border-bottom: none; }
+.col-row.pii-restricted { background: rgba(255,241,242,.4); }
+.col-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+.col-type { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: lowercase; }
+.col-desc { font-size: 12.5px; color: var(--text-secondary); }
+.col-tags { text-align: right; }
+.blurred { filter: blur(5px); user-select: none; pointer-events: none; }
+.restricted-msg { display: inline-flex; align-items: center; gap: 6px; color: var(--red-text); font-size: 12px; font-style: italic; }
+
+/* TESTS */
+.test-row { display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.test-row:last-child { border-bottom: none; }
+.test-name { font-family: var(--font-mono); color: var(--text-primary); }
+.test-col  { font-family: var(--font-mono); color: var(--text-tertiary); font-size: 11px; }
+
+/* LINEAGE */
+.lineage-grid { display: grid; grid-template-columns: 240px 1fr; gap: 18px; }
+.lineage-aside { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; align-self: start; }
+.lineage-section { margin-bottom: 16px; }
+.lineage-section:last-child { margin-bottom: 0; }
+.lineage-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; }
+.lineage-node { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); cursor: pointer; transition: background .12s; min-width: 0; }
+.lineage-node > .lineage-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lineage-node:hover { background: var(--blue-10); }
+.lineage-note { background: var(--surface-overlay); border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 12px; font-size: 11.5px; color: var(--text-tertiary); line-height: 1.5; }
+.lineage-main { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.lineage-h { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.lineage-h-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.lineage-h-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.lineage-iframe { width: 100%; height: 420px; border: none; display: block; }
+.lineage-foot { padding: 10px 18px; border-top: 1px solid var(--border); background: var(--surface-raised); font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); }
+
+/* STATES */
+.center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; gap: 16px; color: var(--text-tertiary); }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--blue-10); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { padding: 60px 24px; text-align: center; color: var(--text-tertiary); font-size: 14px; }
+.error-box { background: var(--surface); border: 1px solid var(--red-border); border-radius: var(--radius-lg); padding: 24px; max-width: 500px; margin: 60px auto; text-align: center; }
+.error-box h2 { color: var(--red-text); font-size: 16px; margin-bottom: 8px; }
+.error-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; }
+`;
+
+// ─── ICONS (Tabler outline, sized via CSS classes — never inline width/height) ─
+const sizeClass = (s) => s === 'xs' ? 'icon icon-xs' : s === 'sm' ? 'icon icon-sm' : 'icon';
+const ti = (path, opts = {}) => (
+  <svg className={sizeClass(opts.size)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {path}
+  </svg>
+);
+const Icon = {
+  acorn: ({ s = 20 } = {}) => (
+    <svg width={s} height={s} viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }}>
+      <ellipse cx="14" cy="18" rx="9" ry="10" fill="white"/>
+      <ellipse cx="14" cy="10" rx="10" ry="5.5" fill="#B8C4D4"/>
+      <circle cx="14" cy="10.5" r="1.5" fill="white"/>
+    </svg>
+  ),
+  lock: (opts) => ti(<><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 1 1 8 0v4"/></>, opts),
+  check: (opts) => ti(<polyline points="5 12 10 17 19 8"/>, opts),
+  arrow: (opts) => ti(<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>, opts),
+  external: (opts) => ti(<><path d="M11 13l9-9"/><path d="M15 4h5v5"/><path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></>, opts),
+};
+
+// ─── HOOKS ──────────────────────────────────────────────────────────────────
+function useFetch(url) {
+  const [state, setState] = useState({ data: null, error: null, loading: true });
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, error: null, loading: true });
+    fetch(url, { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then(d => active && setState({ data: d, error: null, loading: false }))
+      .catch(e => active && setState({ data: null, error: String(e), loading: false }));
+    return () => { active = false; };
+  }, [url]);
+  return state;
+}
+
+function useUser() {
+  const [user, setUser] = useState({ name: '?', initials: '?', groups: [] });
+  useEffect(() => {
+    fetch('/oauth2/userinfo', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const name = d.preferredUsername || d.user || d.email || '?';
+        setUser({ name, initials: name.slice(0, 2).toUpperCase(), groups: d.groups || [] });
+      })
+      .catch(() => {});
+  }, []);
+  return user;
+}
+
+// ─── COMPONENTS ─────────────────────────────────────────────────────────────
+// A breadcrumb entry whose href points OUTSIDE the SPA shell (e.g. "/" which is
+// served by index.html, not catalog.html) must do a full navigation, not a
+// router pushState — otherwise nginx keeps serving catalog.html and the route
+// has nothing to match → blank page.
+function isExternalRoute(href, currentProject) {
+  if (!href) return false;
+  if (href === '/') return true;
+  // anything that doesn't start with /<currentProject> leaves the SPA scope
+  return currentProject ? !href.startsWith('/' + currentProject) : true;
+}
+
+function CrumbLink({ href, currentProject, children }) {
+  if (isExternalRoute(href, currentProject)) {
+    return <a href={href}>{children}</a>;
+  }
+  return <Link to={href}>{children}</Link>;
+}
+
+function Topbar({ breadcrumbs, pills = [], actions }) {
+  // The breadcrumb's project (2nd segment) drives which routes can stay in-SPA.
+  const currentProject = (breadcrumbs[1] && breadcrumbs[1].href || '').split('/')[1] || null;
+  return (
+    <nav className="topbar">
+      <div className="topbar-left">
+        {/* acorn always goes home — full reload to index.html */}
+        <a href="/" className="topbar-acorn"><Icon.acorn /></a>
+        <span className="topbar-sep">|</span>
+        <div className="crumb">
+          {breadcrumbs.map((b, i) => {
+            const isLast = i === breadcrumbs.length - 1;
+            return (
+              <React.Fragment key={i}>
+                {isLast || !b.href
+                  ? <span className="crumb-current">{b.label}</span>
+                  : <CrumbLink href={b.href} currentProject={currentProject}>{b.label}</CrumbLink>}
+                {!isLast && <span className="crumb-arrow">›</span>}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+      <div className="topbar-right">
+        {pills.map((p, i) => <span key={i} className="topbar-pill">{p}</span>)}
+        {actions}
+      </div>
+    </nav>
+  );
+}
+
+// Layer palette — Reborn convention:
+//   - 'gold'   → its own warm amber palette
+//   - 'bronze' → its own copper palette
+//   - 'silver' → neutral grey (explicit second-class tone)
+//   - everything else (staging, source, marts, raw, custom names…)
+//     → Reborn blue (the brand default).
+const LAYER_COLORS = {
+  gold:    { dot: '#f59e0b', bg: '#fffbeb', text: '#92400e', border: '#fcd34d' },
+  bronze:  { dot: '#b45309', bg: '#fef3c7', text: '#78350f', border: '#fbbf24' },
+  silver:  { dot: '#9ca3af', bg: '#f9fafb', text: '#374151', border: '#d1d5db' },
+};
+// Reborn blue default — applied to anything not in LAYER_COLORS.
+const FALLBACK_COLOR = { dot: '#1B2FCC', bg: 'rgba(27,47,204,.08)', text: '#1525A8', border: 'rgba(27,47,204,.22)' };
+const layerColor = (layer) => LAYER_COLORS[(layer || '').toLowerCase()] || FALLBACK_COLOR;
+const layerLabel = (layer) => layer ? layer.charAt(0).toUpperCase() + layer.slice(1) : 'Model';
+
+// Mirror of FastAPI's _infer_layer (used when we read raw manifest nodes
+// directly, e.g. lineage upstream/downstream which come from manifest.json
+// rather than /api/<project>/models).
+function nodeLayer(node, project) {
+  const explicit = ((node && node.meta && node.meta.layer) || '').toLowerCase().trim();
+  if (explicit) return explicit;
+  let schema = ((node && node.schema) || '').toLowerCase().trim();
+  if (schema) {
+    if (project && schema.startsWith(project.toLowerCase() + '_')) {
+      schema = schema.slice(project.length + 1);
+    }
+    return schema || 'model';
+  }
+  return ((node && node.resource_type) || 'model').toLowerCase();
+}
+
+function LayerBadge({ layer }) {
+  const c = layerColor(layer);
+  return (
+    <span className="badge" style={{ background: c.bg, color: c.text, borderColor: c.border }}>
+      {layerLabel(layer)}
+    </span>
+  );
+}
+
+function Dot({ layer }) {
+  return <span className="dot" style={{ background: layerColor(layer).dot }} />;
+}
+
+function Loader({ label = 'Loading…' }) {
+  return <div className="center"><div className="spinner" /><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{label}</span></div>;
+}
+
+function ErrorBox({ msg, onRetry }) {
+  const navigate = useNavigate();
+  return (
+    <div className="error-box">
+      <h2>Something went wrong</h2>
+      <p>{msg}</p>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+        <button className="btn btn-primary" onClick={() => onRetry ? onRetry() : window.location.reload()}>Retry</button>
+        <button className="btn btn-secondary" onClick={() => navigate('/')}>Back to portal</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── PROJECT PAGE ───────────────────────────────────────────────────────────
+function ProjectPage() {
+  const { project } = useParams();
+  const navigate = useNavigate();
+  const { data, error, loading } = useFetch(`/api/${project}/models`);
+  const [filterLayer, setFilterLayer] = useState('all');
+  const [filterTag, setFilterTag] = useState(null);
+
+  if (loading) return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project}]} /><Loader /></>);
+  if (error) {
+    if (error.includes('403')) {
+      // not authorized → bounce to home
+      setTimeout(() => navigate('/'), 50);
+      return <Loader label="Redirecting…" />;
+    }
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project}]} /><ErrorBox msg={error} /></>);
+  }
+
+  const models = data.models || [];
+
+  // Layers actually present in the project's manifest. Sorted by convention
+  // (known names first in a sensible medallion order, then any unknown name
+  // alphabetically) so the sidebar order stays stable across reloads.
+  const KNOWN_ORDER = ['source', 'raw', 'bronze', 'staging', 'silver', 'marts', 'gold'];
+  const knownIdx = (l) => { const i = KNOWN_ORDER.indexOf(l); return i === -1 ? KNOWN_ORDER.length : i; };
+  const layerCounts = models.reduce((acc, m) => {
+    const k = (m.layer || 'unknown').toLowerCase();
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const layerEntries = Object.entries(layerCounts).sort((a, b) => {
+    const ka = knownIdx(a[0]), kb = knownIdx(b[0]);
+    if (ka !== kb) return ka - kb;
+    return a[0].localeCompare(b[0]);
+  });
+  const counts = {
+    all: models.length,
+    pii: models.filter(m => m.pii_columns_count > 0).length,
+    tests: models.filter(m => m.tests_count > 0).length,
+  };
+
+  const filtered = models.filter(m => {
+    if (filterLayer !== 'all' && (m.layer || '').toLowerCase() !== filterLayer) return false;
+    if (filterTag === 'pii' && m.pii_columns_count === 0) return false;
+    if (filterTag === 'tests' && m.tests_count === 0) return false;
+    return true;
+  });
+
+  const totalPii = models.reduce((s, m) => s + m.pii_columns_count, 0);
+  const totalTests = models.reduce((s, m) => s + m.tests_count, 0);
+
+  return (
+    <>
+      <Topbar
+        breadcrumbs={[{ label: 'ReBorn', href: '/' }, { label: project }]}
+        pills={[`${models.length} models`]}
+      />
+      <div className="app-layout">
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <div className="sidebar-title">Layer</div>
+            <div className={'sidebar-item' + (filterLayer === 'all' ? ' active' : '')} onClick={() => setFilterLayer('all')}>
+              <span className="sidebar-item-label"><span className="name">All models</span></span>
+              <span className="sidebar-count">{counts.all}</span>
+            </div>
+            {layerEntries.map(([layer, count]) => (
+              <div key={layer} className={'sidebar-item' + (filterLayer === layer ? ' active' : '')} onClick={() => setFilterLayer(layer)}>
+                <span className="sidebar-item-label">
+                  <Dot layer={layer} />
+                  <span className="name">{layerLabel(layer)}</span>
+                </span>
+                <span className="sidebar-count">{count}</span>
+              </div>
+            ))}
+          </div>
+          <div className="sidebar-section">
+            <div className="sidebar-title">Tags</div>
+            <div className={'sidebar-item' + (filterTag === 'pii' ? ' active' : '')} onClick={() => setFilterTag(filterTag === 'pii' ? null : 'pii')}>
+              <span className="sidebar-item-label" style={{ color: filterTag === 'pii' ? '#fff' : 'var(--red-text)' }}>
+                <Icon.lock />
+                <span className="name">Contains PII</span>
+              </span>
+              <span className="sidebar-count">{counts.pii}</span>
+            </div>
+            <div className={'sidebar-item' + (filterTag === 'tests' ? ' active' : '')} onClick={() => setFilterTag(filterTag === 'tests' ? null : 'tests')}>
+              <span className="sidebar-item-label" style={{ color: filterTag === 'tests' ? '#fff' : 'var(--green-text)' }}>
+                <Icon.check />
+                <span className="name">Has tests</span>
+              </span>
+              <span className="sidebar-count">{counts.tests}</span>
+            </div>
+          </div>
+        </aside>
+
+        <main className="main">
+          <div className="stat-strip">
+            <div className="stat-card"><div className="stat-label">Total models</div><div className="stat-value">{models.length}</div></div>
+            <div className="stat-card"><div className="stat-label">Tests defined</div><div className="stat-value green">{totalTests}</div></div>
+            <div className="stat-card"><div className="stat-label">PII columns (visible to you)</div><div className="stat-value red">{totalPii}</div></div>
+          </div>
+
+          <div className="list-card">
+            <div className="list-header">
+              <span>Name</span><span>Description</span><span>Layer</span><span style={{ textAlign: 'right' }}>Columns</span>
+            </div>
+            {filtered.length === 0 ? (
+              <div className="empty">No model matches the current filter.</div>
+            ) : filtered.map(m => (
+              <div key={m.unique_id} className="list-row" onClick={() => navigate(`/${project}/${m.name}`)}>
+                <span className="list-name">
+                  <Dot layer={m.layer} />
+                  {m.name}
+                </span>
+                <span className="list-desc">{m.description || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>no description</span>}</span>
+                <span className="list-badges">
+                  <LayerBadge layer={m.layer} />
+                  {m.pii_columns_count > 0 && <span className="badge pii"><Icon.lock size="xs"/> PII</span>}
+                </span>
+                <span className="list-cols">{m.columns_count}</span>
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+    </>
+  );
+}
+
+// ─── MODEL DETAIL ───────────────────────────────────────────────────────────
+function ModelDetail() {
+  const { project, model } = useParams();
+  const navigate = useNavigate();
+  const modelsState = useFetch(`/api/${project}/models`);
+  const manifestState = useFetch(`/${project}/manifest.json`);
+
+  if (modelsState.loading || manifestState.loading) {
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model}]} /><Loader /></>);
+  }
+  const err = modelsState.error || manifestState.error;
+  if (err) {
+    if (err.includes('403')) { setTimeout(() => navigate('/'), 50); return <Loader label="Redirecting…" />; }
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model}]} /><ErrorBox msg={err} /></>);
+  }
+
+  const allModels = modelsState.data.models || [];
+  const meta = allModels.find(m => m.name === model);
+  const node = (manifestState.data.nodes || {})[meta?.unique_id || ''] || {};
+
+  if (!meta) {
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model}]} /><div className="empty">Model "{model}" not found.</div></>);
+  }
+
+  // Tests for this model: scan manifest for resource_type=test depending on this node.
+  const tests = Object.values(manifestState.data.nodes || {})
+    .filter(n => n.resource_type === 'test' && (n.depends_on?.nodes || []).includes(meta.unique_id))
+    .map(n => ({
+      name: n.name,
+      column: (n.column_name || (n.test_metadata?.kwargs?.column_name) || ''),
+    }));
+
+  // Columns from FastAPI-filtered manifest (PII columns are absent if not allowed).
+  const allCols = node.columns || {};
+  const visibleColNames = new Set(Object.keys(allCols));
+  // To know which PII columns are masked, we inspect catalog.json (which lists every
+  // physical column even if filtered) — but that endpoint also goes through FastAPI
+  // and applies the same filter. So the safe heuristic is: if meta.pii_columns_count
+  // > visible PII count → some are hidden. We need the source-of-truth list to render
+  // blurred rows. Solution: also fetch the *unfiltered* catalog metadata via a public
+  // dbt artifact stripped of the column descriptions.
+  // For the POC we read the columns dict directly from the catalog (filtered) and add
+  // placeholders for any PII column not present.
+
+  const pills = [];
+  pills.push(layerLabel(meta.layer));
+  if (meta.pii_columns_count > 0) pills.push('PII');
+  if (meta.tests_count > 0) pills.push(`${meta.tests_count} tests`);
+
+  return (
+    <>
+      <Topbar
+        breadcrumbs={[{ label: 'ReBorn', href: '/' }, { label: project, href: `/${project}` }, { label: model }]}
+        pills={pills}
+        actions={<Link to={`/${project}/${model}/lineage`} className="topbar-action">Lineage <Icon.arrow size="xs"/></Link>}
+      />
+      <div className="app-layout">
+        <ModelSidebar project={project} models={allModels} current={model} />
+        <main className="main">
+          <div className="hero">
+            <div className="hero-title">{meta.name}</div>
+            <div className="hero-path">{project} / {meta.path || `models/${meta.layer}/${meta.name}.sql`}</div>
+            <div className="hero-pills">
+              <LayerBadge layer={meta.layer} />
+              {meta.pii_columns_count > 0 && <span className="badge pii"><Icon.lock size="xs"/> PII</span>}
+              {meta.tests_count > 0 && <span className="badge tests"><Icon.check size="xs"/> {meta.tests_count} tests</span>}
+            </div>
+            <div className="hero-desc">{meta.description || <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>No description.</span>}</div>
+            <div className="hero-actions">
+              <Link to={`/${project}/${model}/lineage`} className="btn btn-primary">Lineage <Icon.arrow size="xs"/></Link>
+              <a className="btn btn-secondary" href={`/${project}/_dbt/#!/model/${meta.unique_id}`} target="_blank" rel="noreferrer">Open in dbt docs <Icon.external size="xs"/></a>
+            </div>
+          </div>
+
+          <div className="props">
+            <div className="prop"><div className="prop-label">Materialization</div><div className="prop-value">{meta.materialized}</div></div>
+            <div className="prop"><div className="prop-label">Schema</div><div className="prop-value">{meta.schema}</div></div>
+            <div className="prop"><div className="prop-label">Database</div><div className="prop-value">{meta.database}</div></div>
+          </div>
+
+          {tests.length > 0 && (
+            <div className="section">
+              <div className="section-h"><span className="section-h-title">Tests · {tests.length}</span></div>
+              <div className="section-body">
+                {tests.map((t, i) => (
+                  <div className="test-row" key={i}>
+                    <span className="badge tests"><Icon.check size="xs"/> defined</span>
+                    <span className="test-name">{t.name}</span>
+                    {t.column && <span className="test-col">· {t.column}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="section">
+            <div className="section-h">
+              <span className="section-h-title">Columns · {meta.columns_count}</span>
+              {meta.pii_columns_count > visibleColNames.size && <span style={{ fontSize: 11, color: 'var(--red-text)' }}><Icon.lock size="xs"/> {meta.pii_columns_count - countPiiVisible(allCols)} masked</span>}
+            </div>
+            <div className="section-body col-table">
+              <div className="col-row" style={{ background: 'var(--surface-raised)', fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '.06em' }}>
+                <span>Name</span><span>Type</span><span>Description</span><span style={{ textAlign: 'right' }}>Tags</span>
+              </div>
+              <ColumnsBody node={node} expectedCount={meta.columns_count} />
+            </div>
+          </div>
+        </main>
+      </div>
+    </>
+  );
+}
+
+function countPiiVisible(cols) {
+  return Object.values(cols).filter(c => (c.tags || []).includes('pii')).length;
+}
+
+function ColumnsBody({ node, expectedCount }) {
+  const cols = node.columns || {};
+  const visible = Object.entries(cols);
+  const hiddenCount = expectedCount - visible.length;
+  return (
+    <>
+      {visible.map(([name, col]) => {
+        const isPii = (col.tags || []).includes('pii');
+        return (
+          <div key={name} className={'col-row' + (isPii ? ' pii-restricted' : '')}>
+            <span className="col-name">{name}</span>
+            <span className="col-type">{col.data_type || '—'}</span>
+            <span className="col-desc">{col.description || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>no description</span>}</span>
+            <span className="col-tags">{isPii && <span className="badge pii"><Icon.lock size="xs"/> PII</span>}</span>
+          </div>
+        );
+      })}
+      {hiddenCount > 0 && Array.from({ length: hiddenCount }).map((_, i) => (
+        <div key={`hidden-${i}`} className="col-row pii-restricted">
+          <span className="col-name blurred">restricted_column_name</span>
+          <span className="col-type blurred">varchar</span>
+          <span className="restricted-msg"><Icon.lock size="xs"/> Restricted — PII column (ask for pii-authorized)</span>
+          <span className="col-tags"><span className="badge pii"><Icon.lock size="xs"/> PII</span></span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function ModelSidebar({ project, models, current }) {
+  const navigate = useNavigate();
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-section">
+        <div className="sidebar-title">{project} · models</div>
+        {models.filter(m => m.resource_type === 'model').map(m => (
+          <div
+            key={m.unique_id}
+            className={'sidebar-item' + (m.name === current ? ' active' : '')}
+            onClick={() => navigate(`/${project}/${m.name}`)}
+          >
+            <span className="sidebar-item-label">
+              <Dot layer={m.layer} />
+              <span className="name">{m.name}</span>
+            </span>
+            {m.pii_columns_count > 0 && <Icon.lock size="xs"/>}
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+// ─── LINEAGE VIEW ───────────────────────────────────────────────────────────
+function LineageView() {
+  const { project, model } = useParams();
+  const navigate = useNavigate();
+  const modelsState = useFetch(`/api/${project}/models`);
+  const manifestState = useFetch(`/${project}/manifest.json`);
+
+  if (modelsState.loading || manifestState.loading) {
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model,href:`/${project}/${model}`},{label:'Lineage'}]} /><Loader /></>);
+  }
+  const err = modelsState.error || manifestState.error;
+  if (err) {
+    if (err.includes('403')) { setTimeout(() => navigate('/'), 50); return <Loader label="Redirecting…" />; }
+    return (<><Topbar breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model}]} /><ErrorBox msg={err} /></>);
+  }
+
+  const allModels = modelsState.data.models || [];
+  const meta = allModels.find(m => m.name === model);
+  if (!meta) return <div className="empty">Model not found.</div>;
+
+  const nodes = manifestState.data.nodes || {};
+  // Lineage shows real consumers/producers, not test nodes. Tests live in
+  // depends_on too but they pollute the sidebar (one test = one entry, long
+  // names overflow the 240px aside).
+  const isDataNode = (n) => n && n.resource_type !== 'test';
+  const upstreamIds = (nodes[meta.unique_id]?.depends_on?.nodes) || [];
+  const upstream = upstreamIds
+    .map(id => ({ id, node: nodes[id] }))
+    .filter(x => isDataNode(x.node));
+  const downstream = Object.entries(nodes)
+    .filter(([, n]) => isDataNode(n) && (n.depends_on?.nodes || []).includes(meta.unique_id))
+    .map(([id, n]) => ({ id, node: n }));
+
+  const goto = (n) => {
+    if (!n) return;
+    if (n.resource_type === 'model' || n.resource_type === 'seed') navigate(`/${project}/${n.name}`);
+  };
+
+  return (
+    <>
+      <Topbar
+        breadcrumbs={[{label:'ReBorn',href:'/'},{label:project,href:`/${project}`},{label:model,href:`/${project}/${model}`},{label:'Lineage'}]}
+        pills={[`${upstream.length} upstream`, `${downstream.length} downstream`]}
+        actions={<Link to={`/${project}/${model}`} className="topbar-action">Back to model</Link>}
+      />
+      <div className="app-layout" style={{ gridTemplateColumns: '1fr', padding: '24px 32px' }}>
+        <div className="lineage-grid">
+          <aside className="lineage-aside">
+            <div className="lineage-section">
+              <div className="lineage-title">Upstream · {upstream.length}</div>
+              {upstream.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>none</div> :
+                upstream.map(({ id, node }) => (
+                  <div key={id} className="lineage-node" onClick={() => goto(node)} title={node.name}>
+                    <Dot layer={nodeLayer(node, project)} />
+                    <span className="lineage-node-name">{node.name}</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="lineage-section">
+              <div className="lineage-title">Downstream · {downstream.length}</div>
+              {downstream.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>none</div> :
+                downstream.map(({ id, node }) => (
+                  <div key={id} className="lineage-node" onClick={() => goto(node)} title={node.name}>
+                    <Dot layer={nodeLayer(node, project)} />
+                    <span className="lineage-node-name">{node.name}</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="lineage-note">
+              Lineage rendered by the native <strong>dbt-docs</strong> SPA inside the iframe.
+              The graph is exact and matches what <code>dbt docs serve</code> produces.
+            </div>
+          </aside>
+
+          <div className="lineage-main">
+            <div className="lineage-h">
+              <div>
+                <div className="lineage-h-title">Dependency graph</div>
+                <div className="lineage-h-sub">{model} · {project} project</div>
+              </div>
+              <a className="btn btn-secondary" href={`/${project}/_dbt/#!/model/${meta.unique_id}?g_v=1`} target="_blank" rel="noreferrer">Open in dbt docs <Icon.external size="xs"/></a>
+            </div>
+            <iframe
+              className="lineage-iframe"
+              src={`/${project}/_dbt/#!/model/${meta.unique_id}?g_v=1&g_i=%2B${meta.unique_id}%2B`}
+              title="dbt lineage"
+              onLoad={(e) => {
+                // dbt-docs measures its canvas once at boot; if the iframe
+                // hasn't reached its final size yet, the graph renders at
+                // 0×0 and stays invisible until a resize. Fire two delayed
+                // resize events so the native SPA re-runs its layout.
+                const win = e.currentTarget.contentWindow;
+                if (!win) return;
+                const kick = () => win.dispatchEvent(new Event('resize'));
+                setTimeout(kick, 150);
+                setTimeout(kick, 600);
+              }}
+            />
+            <div className="lineage-foot">
+              source: manifest.json · nodes.depends_on.nodes · rendered by dbt-docs
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── ROUTER ─────────────────────────────────────────────────────────────────
+function App() {
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: TOKENS_CSS }} />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/:project" element={<ProjectPage />} />
+          <Route path="/:project/:model" element={<ModelDetail />} />
+          <Route path="/:project/:model/lineage" element={<LineageView />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

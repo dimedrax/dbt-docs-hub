@@ -1,0 +1,11 @@
+# Reborn DataOps Platform — OPA bundle config (file-based, POC)
+# In production, switch to a remote bundle service.
+services: {}
+
+bundles: {}
+
+decision_logs:
+  console: true
+
+status:
+  console: true
